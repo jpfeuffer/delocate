@@ -167,8 +167,8 @@ def _analyze_tree_libs(
                 existing_source_rp = copied_basenames[r_ed_base]
                 if rp_required != existing_source_rp:
                     raise DelocationError(
-                        "Already planning to copy library with same basename as: "
-                        + r_ed_base
+                        "Already planning to copy library with same "
+                        f"basename as: {r_ed_base}"
                     )
                 # Same source location, no error needed
                 # This shouldn't happen if lib_dict is properly constructed with
