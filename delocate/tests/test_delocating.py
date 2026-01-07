@@ -18,6 +18,7 @@ from packaging.utils import InvalidWheelFilename
 from packaging.version import Version
 
 from ..delocating import (
+    _analyze_tree_libs,
     _get_archs_and_version_from_wheel_name,
     _get_macos_min_version,
     bads_report,
@@ -104,6 +105,82 @@ def without_system_libs(obj):
     if isinstance(obj, dict):
         out = {k: obj[k] for k in out}
     return out
+
+
+def test_analyze_tree_libs_same_basename_same_source():
+    """Test that _analyze_tree_libs handles same basename from same source.
+    
+    When the same library is referenced via different paths (e.g., symlinks)
+    that resolve to the same file, no error should be raised.
+    """
+    from ..tmpdirs import InTemporaryDirectory
+    
+    with InTemporaryDirectory():
+        # Create a library file
+        lib_dir = Path("libs")
+        lib_dir.mkdir()
+        lib_file = lib_dir / "libfoo.dylib"
+        lib_file.write_text("dummy")
+        
+        # Create a symlink to the same file
+        symlink_dir = Path("links")
+        symlink_dir.mkdir()
+        symlink = symlink_dir / "libfoo.dylib"
+        symlink.symlink_to(lib_file.resolve())
+        
+        # Create a lib_dict with both paths
+        # In normal operation, lib_dict uses realpaths so this shouldn't happen,
+        # but we test the defensive code
+        lib_dict = {
+            str(lib_file.resolve()): {"requirer1": "libfoo.dylib"},
+            str(symlink.resolve()): {"requirer2": "libfoo.dylib"},
+        }
+        
+        # Use a root_path that makes both libraries appear out-of-tree
+        root_path = "/fictional"
+        
+        # This should NOT raise an error because they resolve to the same file
+        needs_copying, needs_delocating = _analyze_tree_libs(lib_dict, root_path)
+        
+        # Should have exactly one entry in needs_copying
+        assert len(needs_copying) == 1
+        assert needs_delocating == set()
+
+
+def test_analyze_tree_libs_same_basename_different_source():
+    """Test that _analyze_tree_libs errors on same basename from different sources.
+    
+    When two different libraries have the same basename, an error should be raised.
+    """
+    from ..tmpdirs import InTemporaryDirectory
+    
+    with InTemporaryDirectory():
+        # Create two different library files with same basename
+        lib_dir1 = Path("libs1")
+        lib_dir1.mkdir()
+        lib_file1 = lib_dir1 / "libfoo.dylib"
+        lib_file1.write_text("dummy1")
+        
+        lib_dir2 = Path("libs2")
+        lib_dir2.mkdir()
+        lib_file2 = lib_dir2 / "libfoo.dylib"
+        lib_file2.write_text("dummy2")
+        
+        # Create a lib_dict with both different files
+        lib_dict = {
+            str(lib_file1.resolve()): {"requirer1": "libfoo.dylib"},
+            str(lib_file2.resolve()): {"requirer2": "libfoo.dylib"},
+        }
+        
+        # Use a root_path that makes both libraries appear out-of-tree
+        root_path = "/fictional"
+        
+        # This SHOULD raise an error because they are different files
+        with pytest.raises(
+            DelocationError,
+            match=r"Already planning to copy library with same basename as: libfoo.dylib"
+        ):
+            _analyze_tree_libs(lib_dict, root_path)
 
 
 @pytest.mark.xfail(sys.platform != "darwin", reason="Runs macOS executable.")
