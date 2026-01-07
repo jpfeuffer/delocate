@@ -114,7 +114,7 @@ def test_analyze_tree_libs_same_basename_same_source():
     and that dependency appears in lib_dict with different path strings that
     resolve to the same physical file (e.g., via symlinks, path normalization
     issues, or ".." in paths). This should NOT raise an error since they're
-    the same file.
+    the same file!
     """
     with InTemporaryDirectory():
         # Create a library file
