@@ -18,6 +18,7 @@ from packaging.utils import InvalidWheelFilename
 from packaging.version import Version
 
 from ..delocating import (
+    _analyze_tree_libs,
     _get_archs_and_version_from_wheel_name,
     _get_macos_min_version,
     bads_report,
@@ -104,6 +105,89 @@ def without_system_libs(obj):
     if isinstance(obj, dict):
         out = {k: obj[k] for k in out}
     return out
+
+
+def test_analyze_tree_libs_same_basename_same_source():
+    """Test same dependency appearing with different path representations.
+
+    Scenario: Two binaries in a wheel reference the same external dependency,
+    and that dependency appears in lib_dict with different path strings that
+    resolve to the same physical file (e.g., via symlinks, path normalization
+    issues, or ".." in paths). This should NOT raise an error since they're
+    the same file!
+    """
+    with InTemporaryDirectory():
+        # Create a library file
+        lib_dir = Path("libs")
+        lib_dir.mkdir()
+        lib_file = lib_dir / "libfoo.dylib"
+        lib_file.write_text("dummy")
+
+        # Create a symlink to the same file
+        symlink_dir = Path("links")
+        symlink_dir.mkdir()
+        symlink = symlink_dir / "libfoo.dylib"
+        symlink.symlink_to(lib_file.resolve())
+
+        # Create a lib_dict with both paths (not resolved)
+        # This simulates a case where the same dependency appears with
+        # different path representations in lib_dict
+        lib_dict = {
+            str(lib_file): {"binary1.so": "libfoo.dylib"},
+            str(symlink): {"binary2.so": "libfoo.dylib"},
+        }
+
+        # Use a root_path that makes both libraries appear out-of-tree
+        root_path = "/fictional"
+
+        # This should NOT raise an error because they resolve to same file
+        needs_copying, needs_delocating = _analyze_tree_libs(
+            lib_dict, root_path
+        )
+
+        # Should have one entry for the first path encountered
+        assert len(needs_copying) == 1
+        assert needs_delocating == set()
+
+
+def test_analyze_tree_libs_same_basename_different_source():
+    """Test error when different files have the same basename.
+
+    When two different external dependencies have the same basename
+    (e.g., /usr/local/lib/libfoo.dylib and /opt/lib/libfoo.dylib),
+    an error should be raised because we can't copy both to the same
+    destination.
+    """
+    with InTemporaryDirectory():
+        # Create two different library files with same basename
+        lib_dir1 = Path("libs1")
+        lib_dir1.mkdir()
+        lib_file1 = lib_dir1 / "libfoo.dylib"
+        lib_file1.write_text("dummy1")
+
+        lib_dir2 = Path("libs2")
+        lib_dir2.mkdir()
+        lib_file2 = lib_dir2 / "libfoo.dylib"
+        lib_file2.write_text("dummy2")
+
+        # Create a lib_dict with both different files
+        lib_dict = {
+            str(lib_file1.resolve()): {"binary1.so": "libfoo.dylib"},
+            str(lib_file2.resolve()): {"binary2.so": "libfoo.dylib"},
+        }
+
+        # Use a root_path that makes both libraries appear out-of-tree
+        root_path = "/fictional"
+
+        # This SHOULD raise an error because they are different files
+        with pytest.raises(
+            DelocationError,
+            match=(
+                r"Already planning to copy library with same "
+                r"basename as: libfoo.dylib"
+            ),
+        ):
+            _analyze_tree_libs(lib_dict, root_path)
 
 
 @pytest.mark.xfail(sys.platform != "darwin", reason="Runs macOS executable.")

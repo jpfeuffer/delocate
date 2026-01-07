@@ -152,7 +152,9 @@ def _analyze_tree_libs(
     """
     needs_delocating = set()  # Libraries which need install names updated.
     needs_copying = {}  # A report of which libraries were copied.
-    copied_basenames = set()
+    copied_basenames: dict[
+        str, str
+    ] = {}  # Maps basename to canonical source path
     rp_root_path = realpath(root_path)
     for required, requirings in lib_dict.items():
         if required.startswith("@"):
@@ -161,16 +163,24 @@ def _analyze_tree_libs(
         r_ed_base = basename(required)
         if relpath(required, rp_root_path).startswith(".."):
             # Not local, plan to copy
+            rp_required = realpath(required)
             if r_ed_base in copied_basenames:
-                raise DelocationError(
-                    "Already planning to copy library with same basename as: "
-                    + r_ed_base
-                )
+                # Check if it's from a different source location
+                existing_source_rp = copied_basenames[r_ed_base]
+                if rp_required != existing_source_rp:
+                    raise DelocationError(
+                        "Already planning to copy library with same "
+                        f"basename as: {r_ed_base}"
+                    )
+                # Same file referenced via different path - skip duplicate
+                # This handles cases where the same dependency appears with
+                # different path representations (symlinks, "..", etc.)
+                continue
             if not exists(required):
                 raise DelocationError(f'library "{required}" does not exist')
             # Copy requirings to preserve it since it will be modified later.
             needs_copying[required] = dict(requirings)
-            copied_basenames.add(r_ed_base)
+            copied_basenames[r_ed_base] = rp_required
         else:  # Is local, plan to set relative loader_path
             needs_delocating.add(required)
     return needs_copying, needs_delocating
