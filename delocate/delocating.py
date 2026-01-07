@@ -170,9 +170,9 @@ def _analyze_tree_libs(
                         "Already planning to copy library with same "
                         f"basename as: {r_ed_base}"
                     )
-                # Same source location, no error needed
-                # This shouldn't happen if lib_dict is properly constructed with
-                # canonical paths, but we handle it just in case
+                # Same file referenced via different path - skip duplicate
+                # This handles cases where the same dependency appears with
+                # different path representations (symlinks, "..", etc.)
                 continue
             if not exists(required):
                 raise DelocationError(f'library "{required}" does not exist')

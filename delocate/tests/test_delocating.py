@@ -116,8 +116,6 @@ def test_analyze_tree_libs_same_basename_same_source():
     issues, or ".." in paths). This should NOT raise an error since they're
     the same file.
     """
-    from ..tmpdirs import InTemporaryDirectory
-
     with InTemporaryDirectory():
         # Create a library file
         lib_dir = Path("libs")
@@ -160,8 +158,6 @@ def test_analyze_tree_libs_same_basename_different_source():
     an error should be raised because we can't copy both to the same
     destination.
     """
-    from ..tmpdirs import InTemporaryDirectory
-
     with InTemporaryDirectory():
         # Create two different library files with same basename
         lib_dir1 = Path("libs1")
