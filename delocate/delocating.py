@@ -152,7 +152,7 @@ def _analyze_tree_libs(
     """
     needs_delocating = set()  # Libraries which need install names updated.
     needs_copying = {}  # A report of which libraries were copied.
-    copied_basenames = {}  # Maps basename to canonical source path
+    copied_basenames: dict[str, str] = {}  # Maps basename to canonical source path
     rp_root_path = realpath(root_path)
     for required, requirings in lib_dict.items():
         if required.startswith("@"):
