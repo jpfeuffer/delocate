@@ -128,12 +128,12 @@ def test_analyze_tree_libs_same_basename_same_source():
         symlink = symlink_dir / "libfoo.dylib"
         symlink.symlink_to(lib_file.resolve())
 
-        # Create a lib_dict with both paths
-        # In normal operation, lib_dict uses realpaths so this shouldn't
-        # happen, but we test the defensive code
+        # Create a lib_dict with both paths (not resolved)
+        # This tests the defensive code that handles cases where the same
+        # file might appear under different paths
         lib_dict = {
-            str(lib_file.resolve()): {"requirer1": "libfoo.dylib"},
-            str(symlink.resolve()): {"requirer2": "libfoo.dylib"},
+            str(lib_file): {"requirer1": "libfoo.dylib"},
+            str(symlink): {"requirer2": "libfoo.dylib"},
         }
 
         # Use a root_path that makes both libraries appear out-of-tree
@@ -144,7 +144,8 @@ def test_analyze_tree_libs_same_basename_same_source():
             lib_dict, root_path
         )
 
-        # Should have exactly one entry in needs_copying
+        # Should have two entries in needs_copying (one for each path)
+        # but both resolve to the same file
         assert len(needs_copying) == 1
         assert needs_delocating == set()
 
