@@ -108,10 +108,13 @@ def without_system_libs(obj):
 
 
 def test_analyze_tree_libs_same_basename_same_source():
-    """Test _analyze_tree_libs handles same basename from same source.
+    """Test same dependency appearing with different path representations.
 
-    When the same library is referenced via different paths (e.g., symlinks)
-    that resolve to the same file, no error should be raised.
+    Scenario: Two binaries in a wheel reference the same external dependency,
+    and that dependency appears in lib_dict with different path strings that
+    resolve to the same physical file (e.g., via symlinks, path normalization
+    issues, or ".." in paths). This should NOT raise an error since they're
+    the same file.
     """
     from ..tmpdirs import InTemporaryDirectory
 
@@ -129,11 +132,11 @@ def test_analyze_tree_libs_same_basename_same_source():
         symlink.symlink_to(lib_file.resolve())
 
         # Create a lib_dict with both paths (not resolved)
-        # This tests the defensive code that handles cases where the same
-        # file might appear under different paths
+        # This simulates a case where the same dependency appears with
+        # different path representations in lib_dict
         lib_dict = {
-            str(lib_file): {"requirer1": "libfoo.dylib"},
-            str(symlink): {"requirer2": "libfoo.dylib"},
+            str(lib_file): {"binary1.so": "libfoo.dylib"},
+            str(symlink): {"binary2.so": "libfoo.dylib"},
         }
 
         # Use a root_path that makes both libraries appear out-of-tree
@@ -144,17 +147,18 @@ def test_analyze_tree_libs_same_basename_same_source():
             lib_dict, root_path
         )
 
-        # Should have two entries in needs_copying (one for each path)
-        # but both resolve to the same file
+        # Should have one entry for the first path encountered
         assert len(needs_copying) == 1
         assert needs_delocating == set()
 
 
 def test_analyze_tree_libs_same_basename_different_source():
-    """Test _analyze_tree_libs errors on same basename from different sources.
+    """Test error when different files have the same basename.
 
-    When two different libraries have the same basename, an error should be
-    raised.
+    When two different external dependencies have the same basename
+    (e.g., /usr/local/lib/libfoo.dylib and /opt/lib/libfoo.dylib),
+    an error should be raised because we can't copy both to the same
+    destination.
     """
     from ..tmpdirs import InTemporaryDirectory
 
@@ -172,8 +176,8 @@ def test_analyze_tree_libs_same_basename_different_source():
 
         # Create a lib_dict with both different files
         lib_dict = {
-            str(lib_file1.resolve()): {"requirer1": "libfoo.dylib"},
-            str(lib_file2.resolve()): {"requirer2": "libfoo.dylib"},
+            str(lib_file1.resolve()): {"binary1.so": "libfoo.dylib"},
+            str(lib_file2.resolve()): {"binary2.so": "libfoo.dylib"},
         }
 
         # Use a root_path that makes both libraries appear out-of-tree
